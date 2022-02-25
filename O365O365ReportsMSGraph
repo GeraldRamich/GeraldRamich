@@ -1,0 +1,57 @@
+# This is used for Automated creation of Graph Reports using a Certificate and Azure Apps registration
+# requires Graph > Reports.Read.All permission
+# require microsoft.graph.reports Module
+# https://www.powershellgallery.com/packages/Microsoft.Graph.Reports/1.1.0
+# PowerShell Graph Cmdlets https://docs.microsoft.com/en-us/powershell/module/microsoft.graph.reports/?view=graph-powershell-beta
+# Requires CSV with Graph Report Name and Date Period Parameters. GraphReports.csv
+# To get a list of reports available use
+# https://docs.microsoft.com/en-us/graph/api/resources/report?view=graph-rest-1.0 
+
+#This is the ClientID (Application ID) of registered AzureAD App
+$ClientID = "YourClientAppID"
+#This is your Office 365 Tenant Domain Name or Tenant Id
+$TenantId = "YourFQDN.onmicrosoft.com"
+$thumbprint = "YourCertificateThumb"
+
+
+Connect-MGGraph -ClientId $clientId -CertificateThumbprint $thumbprint -TenantId $TenantId | Out-Null
+
+$Date = get-date -Format "MM.dd.yyyy-hh.mm-tt" 
+$CurrentPath = (Get-Item -Path ".\" -Verbose).FullName
+
+
+#Create a Function to create the report
+ Function CreateReport {
+
+    $ReportOutput = "$CurrentPath\$ReportName" +"_" + "$Date.csv"
+    Invoke-MgGraphRequest -Method GET -Uri "$apiUrl" -OutputFilePath $ReportOutput
+
+}
+
+
+Start-Transcript -path "$CurrentPath\$date-GraphReports-PowerShell.txt" | Out-Null
+Clear-Host
+Write-output "$(get-date) Start running of Reports from csv"  
+
+Import-Csv c:\scripts\GraphReports.csv | ForEach-Object{
+    $ReportName = $_.ReportName
+    $Period = $_.Period
+	
+if( $Period -like "" )
+    {
+
+        Write-Host "Generating" $ReportName
+        $apiUrl = "v1.0/reports/$ReportName"
+        CreateReport 
+}
+else
+    {
+        Write-Host "Generating" $ReportName
+        $apiUrl = "v1.0/reports/$ReportName(period='$Period')"
+        CreateReport 
+    }
+
+}
+Stop-Transcript
+
+DisConnect-MGGraph
