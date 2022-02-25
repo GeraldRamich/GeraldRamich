@@ -1,0 +1,63 @@
+# This is used for Automated creation of Graph Reports using a Secrete and Azure Apps registration
+# requires Graph > Reports.Read.All permission
+# Requires CSV with Graph Report Name and Date Period Parameters. GraphReports.csv
+# To get a list of reports available use
+# https://docs.microsoft.com/en-us/graph/api/resources/report?view=graph-rest-1.0 
+
+
+#This is the ClientID (Application ID) of registered AzureAD App
+$ClientID = "ClientAppID"
+#This is the key of the registered AzureAD app
+$ClientSecret = "SecretPassowrd"
+#This is your Office 365 Tenant Domain Name or Tenant Id
+$TenantId = "FQDN.onmicrosoft.com"
+#$TenantId = "TenantIDAppsRegistration"
+#Create Body of call to get Access Token 
+$Body = @{client_id=$ClientID;client_secret=$ClientSecret;grant_type="client_credentials";scope="https://graph.microsoft.com/.default";}
+$OAuthReq = Invoke-RestMethod -Method Post -Uri https://login.microsoftonline.com/$TenantId/oauth2/v2.0/token -Body $Body
+$TokenType = $OAuthReq.token_type
+$AccessToken = $OAuthReq.access_token
+$Date = get-date -Format "MM.dd.yyyy-hh.mm-tt" 
+$CurrentPath = (Get-Item -Path ".\" -Verbose).FullName
+
+
+#Create a Function to create the report
+ Function CreateReport {
+$Report = Invoke-RestMethod -Headers @{Authorization = "Bearer $AccessToken"} -Uri $apiUrl -Method Get
+# Creating this output incase the "fixed" output is blank, you can still see headers.
+$Report > $CurrentPath\AllReports\$ReportName.txt
+#Remove special chars from header. BOM (Byte Order Marker) from UTF 8 
+$Report = $Report.Replace('ï»¿','')
+#Convert the stream result to an array
+$ReportArray = ConvertFrom-Csv -InputObject $Report
+#Export result to CSV
+$ReportArray | Export-Csv "$CurrentPath\AllReports\$ReportName.csv" -NoTypeInformation
+
+}
+
+
+Start-Transcript -path "$CurrentPath\$date-GraphReports.txt" | Out-Null
+Clear-Host
+Write-output "$(get-date) Start running of Reports from csv"  
+
+Import-Csv c:\scripts\GraphReports.csv | ForEach-Object{
+    $ReportName = $_.ReportName
+    $Period = $_.Period
+
+if( $Period -like "" )
+    {
+
+        Write-Host "Generating" $ReportName
+        $apiUrl = "https://graph.microsoft.com/v1.0/reports/$ReportName"
+        CreateReport 
+}
+else
+    {
+        Write-Host "Generating" $ReportName
+        $apiUrl = "https://graph.microsoft.com/v1.0/reports/$ReportName(period='$Period')?$format=text/csv"
+        CreateReport 
+    }
+
+}
+Stop-Transcript
+
